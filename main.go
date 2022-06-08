@@ -34,27 +34,28 @@ func main() {
 
 	paramsChan, msgChan := command.NewCommunication()
 
+	go func() {
+		for msg := range msgChan {
+			bot.Send(tgbotapi.NewMessage(msg.ChatId, msg.Msg))
+		}
+	}()
+
 	for update := range updates {
 		if update.Message != nil {
-			msg := ""
 			msgChatId := update.Message.Chat.ID
 
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
 				case "show":
-					msg = command.ShowCommand(msgChatId)
+					command.ShowCommand(msgChatId)
 				case "add":
-					msg = command.AddCommand(msgChatId)
+					command.AddCommand(msgChatId)
 				}
 
 			} else {
 				params := strings.ToLower(update.Message.Text)
-
-				paramsChan <- command.Params{ChatId: msgChatId, Args: params}
-				msg = <-msgChan
+				paramsChan <- command.Params{ChatId: msgChatId, Msg: params}
 			}
-
-			bot.Send(tgbotapi.NewMessage(msgChatId, msg))
 		}
 	}
 }
