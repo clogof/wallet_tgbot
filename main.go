@@ -32,25 +32,28 @@ func main() {
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
+	go command.H()
+
 	var msg string
 	for update := range updates {
 		if update.Message != nil {
+			msg = ""
+			if update.Message.IsCommand() {
+				switch update.Message.Command() {
+				case "show":
+					msg = command.ShowCommand(update.Message.Chat.ID)
+				case "add":
+					msg = command.AddCommand([]string{}, 0)
+				}
 
-			msgText := strings.ToLower(update.Message.Text)
-			msgArr := strings.Split(msgText, " ")
+			} else {
+				msgText := strings.ToLower(update.Message.Text)
+				msgArr := strings.Split(msgText, " ")
 
-			switch msgArr[0] {
-			case "add":
-				msg = command.AddCommand(msgArr, update.Message.Chat.ID)
-			case "sub":
-				msg = command.SubCommand(msgArr, update.Message.Chat.ID)
-			case "del":
-				msg = command.DelCommand(msgArr, update.Message.Chat.ID)
-			case "show":
-				msg = command.ShowCommand(update.Message.Chat.ID)
-			default:
-				msg = "Некорректная команда"
+				command.ParamsCommandChan <- command.Params{ChatId: update.Message.Chat.ID, Args: msgArr}
+				msg = <-command.Message
 			}
+
 			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, msg))
 		}
 	}

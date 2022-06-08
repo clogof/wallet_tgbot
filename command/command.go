@@ -9,45 +9,81 @@ import (
 	"wallet_tgbot/utils"
 )
 
+const (
+	show = iota
+	add
+	sub
+	del
+)
+
+var Mode int
+
+var ParamsCommandChan chan Params
+var Message chan string
+
+type Params struct {
+	ChatId int64
+	Args   []string
+}
+
 func AddCommand(args []string, chat_id int64) (msg string) {
-	if len(args) != 3 {
-		msg = "Некорректная строка"
+	Mode = add
+	msg = "Введите валюту и сумму"
+	return
+}
+
+func addCom(p Params) {
+	if len(p.Args) != 2 {
 		utils.Loggers.Errorw(
 			"некорректная строка",
-			"args", strings.Join(args, " "),
-			"chat_id", chat_id,
+			"args", strings.Join(p.Args, " "),
+			"chat_id", p.ChatId,
 		)
+		Message <- "Некорректная строка"
 		return
 	}
 
-	coin := args[1]
-	sum, err := strconv.ParseFloat(args[2], 64)
+	coin := p.Args[0]
+	sum, err := strconv.ParseFloat(p.Args[1], 64)
 	if err != nil {
-		msg = "Некорректная сумма"
+		Message <- "Некорректная сумма"
 		utils.Loggers.Errorw(
 			"некорректное значение суммы",
-			"val", args[2],
+			"val", p.Args[1],
 			"err", err,
 		)
 		return
 	}
 
-	w := model.NewWallet(chat_id)
+	w := model.NewWallet(p.ChatId)
 	balance, err := w.Add(coin, sum)
 	if err != nil {
-		msg = "Внутренняя ошибка"
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода Add",
-			"chat_id", chat_id,
+			"chat_id", p.ChatId,
 			"coin", coin,
 			"sum", sum,
 			"err", err,
 		)
+		Message <- "Внутренняя ошибка"
 		return
 	}
 
-	msg = fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
-	return
+	Message <- fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
+}
+
+func H() {
+	ParamsCommandChan = make(chan Params)
+	Message = make(chan string)
+
+	for {
+		d := <-ParamsCommandChan
+		switch Mode {
+		case add:
+			addCom(d)
+		}
+
+	}
 }
 
 func SubCommand(args []string, chat_id int64) (msg string) {
@@ -135,6 +171,8 @@ func DelCommand(args []string, chat_id int64) (msg string) {
 }
 
 func ShowCommand(chat_id int64) (msg string) {
+	Mode = show
+
 	w := model.NewWallet(chat_id)
 	msg, err := w.Show()
 	if err != nil {
