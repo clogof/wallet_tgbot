@@ -34,27 +34,41 @@ func main() {
 
 	go command.H()
 
-	var msg string
+	i := 0
+
 	for update := range updates {
 		if update.Message != nil {
-			msg = ""
+			log.Printf("i: %d", i)
+			msg := ""
+			msgChatId := update.Message.Chat.ID
+			// if i%2 == 0 {
+			// 	msgChatId = 666
+			// } else {
+			// 	msgChatId = 777
+			// }
+
+			log.Printf(
+				"id: %d command: %s msg: %s",
+				msgChatId, update.Message.Command(), update.Message.Text,
+			)
+
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
 				case "show":
-					msg = command.ShowCommand(update.Message.Chat.ID)
+					msg = command.ShowCommand(msgChatId)
 				case "add":
-					msg = command.AddCommand([]string{}, 0)
+					msg = command.AddCommand(msgChatId)
 				}
 
 			} else {
-				msgText := strings.ToLower(update.Message.Text)
-				msgArr := strings.Split(msgText, " ")
+				params := strings.ToLower(update.Message.Text)
 
-				command.ParamsCommandChan <- command.Params{ChatId: update.Message.Chat.ID, Args: msgArr}
-				msg = <-command.Message
+				command.ParamsCommandChan <- params
+				msg = <-command.MessageChan
 			}
 
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, msg))
+			bot.Send(tgbotapi.NewMessage(msgChatId, msg))
+			i++
 		}
 	}
 }

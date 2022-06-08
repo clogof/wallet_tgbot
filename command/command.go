@@ -16,74 +16,73 @@ const (
 	del
 )
 
-var Mode int
+var mode int
+var chatId int64
 
-var ParamsCommandChan chan Params
-var Message chan string
-
-type Params struct {
-	ChatId int64
-	Args   []string
-}
-
-func AddCommand(args []string, chat_id int64) (msg string) {
-	Mode = add
-	msg = "Введите валюту и сумму"
-	return
-}
-
-func addCom(p Params) {
-	if len(p.Args) != 2 {
-		utils.Loggers.Errorw(
-			"некорректная строка",
-			"args", strings.Join(p.Args, " "),
-			"chat_id", p.ChatId,
-		)
-		Message <- "Некорректная строка"
-		return
-	}
-
-	coin := p.Args[0]
-	sum, err := strconv.ParseFloat(p.Args[1], 64)
-	if err != nil {
-		Message <- "Некорректная сумма"
-		utils.Loggers.Errorw(
-			"некорректное значение суммы",
-			"val", p.Args[1],
-			"err", err,
-		)
-		return
-	}
-
-	w := model.NewWallet(p.ChatId)
-	balance, err := w.Add(coin, sum)
-	if err != nil {
-		utils.Loggers.Errorw(
-			"внутренняя ошибка метода Add",
-			"chat_id", p.ChatId,
-			"coin", coin,
-			"sum", sum,
-			"err", err,
-		)
-		Message <- "Внутренняя ошибка"
-		return
-	}
-
-	Message <- fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
-}
+var ParamsCommandChan chan string
+var MessageChan chan string
 
 func H() {
-	ParamsCommandChan = make(chan Params)
-	Message = make(chan string)
+	ParamsCommandChan = make(chan string)
+	MessageChan = make(chan string)
 
 	for {
 		d := <-ParamsCommandChan
-		switch Mode {
+		switch mode {
 		case add:
 			addCom(d)
 		}
 
 	}
+}
+
+func AddCommand(chat_id int64) (msg string) {
+	mode = add
+	chatId = chat_id
+	msg = "Введите валюту и сумму\nНапример: btc 4.3"
+	return
+}
+
+func addCom(s string) {
+	args := strings.Split(s, " ")
+
+	if len(args) != 2 {
+		utils.Loggers.Errorw(
+			"некорректная строка",
+			"args", s,
+			"chat_id", chatId,
+		)
+		MessageChan <- "Некорректная строка"
+		return
+	}
+
+	coin := args[0]
+	sum, err := strconv.ParseFloat(args[1], 64)
+	if err != nil {
+		MessageChan <- "Некорректная сумма"
+		utils.Loggers.Errorw(
+			"некорректное значение суммы",
+			"val", args[1],
+			"err", err,
+		)
+		return
+	}
+
+	w := model.NewWallet(chatId)
+	balance, err := w.Add(coin, sum)
+	if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка метода Add",
+			"chat_id", chatId,
+			"coin", coin,
+			"sum", sum,
+			"err", err,
+		)
+		MessageChan <- "Внутренняя ошибка"
+		return
+	}
+
+	MessageChan <- fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
 }
 
 func SubCommand(args []string, chat_id int64) (msg string) {
@@ -171,7 +170,7 @@ func DelCommand(args []string, chat_id int64) (msg string) {
 }
 
 func ShowCommand(chat_id int64) (msg string) {
-	Mode = show
+	mode = show
 
 	w := model.NewWallet(chat_id)
 	msg, err := w.Show()
