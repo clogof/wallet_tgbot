@@ -37,6 +37,8 @@ func NewCommunication() (chan Params, chan string) {
 			switch modeChat[d.ChatId] {
 			case add:
 				addGetParams(d)
+			default:
+				messageChan <- "Некорректная строка"
 			}
 		}
 	}(paramsCommandChan)
