@@ -16,50 +16,58 @@ const (
 	del
 )
 
-var mode int
-var chatId int64
+var modeChat map[int64]int
 
-var ParamsCommandChan chan string
-var MessageChan chan string
+var paramsCommandChan chan Params
+var messageChan chan string
 
-func H() {
-	ParamsCommandChan = make(chan string)
-	MessageChan = make(chan string)
+type Params struct {
+	ChatId int64
+	Args   string
+}
 
-	for {
-		d := <-ParamsCommandChan
-		switch mode {
-		case add:
-			addCom(d)
+func NewCommunication() (chan Params, chan string) {
+	paramsCommandChan = make(chan Params)
+	messageChan = make(chan string)
+	modeChat = make(map[int64]int)
+
+	go func(p chan Params) {
+		for {
+			d := <-p
+			switch modeChat[d.ChatId] {
+			case add:
+				addGetParams(d)
+			}
 		}
+	}(paramsCommandChan)
 
-	}
+	return paramsCommandChan, messageChan
 }
 
 func AddCommand(chat_id int64) (msg string) {
-	mode = add
-	chatId = chat_id
+	modeChat[chat_id] = add
 	msg = "Введите валюту и сумму\nНапример: btc 4.3"
 	return
 }
 
-func addCom(s string) {
-	args := strings.Split(s, " ")
+func addGetParams(p Params) {
+	chatId := p.ChatId
+	args := strings.Split(p.Args, " ")
 
 	if len(args) != 2 {
 		utils.Loggers.Errorw(
 			"некорректная строка",
-			"args", s,
+			"args", p.Args,
 			"chat_id", chatId,
 		)
-		MessageChan <- "Некорректная строка"
+		messageChan <- "Некорректная строка"
 		return
 	}
 
 	coin := args[0]
 	sum, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
-		MessageChan <- "Некорректная сумма"
+		messageChan <- "Некорректная сумма"
 		utils.Loggers.Errorw(
 			"некорректное значение суммы",
 			"val", args[1],
@@ -78,11 +86,11 @@ func addCom(s string) {
 			"sum", sum,
 			"err", err,
 		)
-		MessageChan <- "Внутренняя ошибка"
+		messageChan <- "Внутренняя ошибка"
 		return
 	}
 
-	MessageChan <- fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
+	messageChan <- fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
 }
 
 func SubCommand(args []string, chat_id int64) (msg string) {
@@ -170,7 +178,7 @@ func DelCommand(args []string, chat_id int64) (msg string) {
 }
 
 func ShowCommand(chat_id int64) (msg string) {
-	mode = show
+	modeChat[chat_id] = show
 
 	w := model.NewWallet(chat_id)
 	msg, err := w.Show()

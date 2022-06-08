@@ -32,7 +32,7 @@ func main() {
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
-	go command.H()
+	paramsChan, msgChan := command.NewCommunication()
 
 	i := 0
 
@@ -63,8 +63,8 @@ func main() {
 			} else {
 				params := strings.ToLower(update.Message.Text)
 
-				command.ParamsCommandChan <- params
-				msg = <-command.MessageChan
+				paramsChan <- command.Params{ChatId: msgChatId, Args: params}
+				msg = <-msgChan
 			}
 
 			bot.Send(tgbotapi.NewMessage(msgChatId, msg))
