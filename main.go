@@ -34,23 +34,10 @@ func main() {
 
 	paramsChan, msgChan := command.NewCommunication()
 
-	i := 0
-
 	for update := range updates {
 		if update.Message != nil {
-			log.Printf("i: %d", i)
 			msg := ""
 			msgChatId := update.Message.Chat.ID
-			// if i%2 == 0 {
-			// 	msgChatId = 666
-			// } else {
-			// 	msgChatId = 777
-			// }
-
-			log.Printf(
-				"id: %d command: %s msg: %s",
-				msgChatId, update.Message.Command(), update.Message.Text,
-			)
 
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
@@ -68,7 +55,6 @@ func main() {
 			}
 
 			bot.Send(tgbotapi.NewMessage(msgChatId, msg))
-			i++
 		}
 	}
 }
