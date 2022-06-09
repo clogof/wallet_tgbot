@@ -47,6 +47,7 @@ func NewCommunication() (chan Params, chan Params) {
 
 func ShowCommand(chatId int64) {
 	modeChat[chatId] = show
+	defer delete(modeChat, chatId)
 
 	messageChan <- Params{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
 
@@ -72,6 +73,8 @@ func AddCommand(chatId int64) {
 func addGetParams(p Params) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
+
+	defer delete(modeChat, p.ChatId)
 
 	if len(args) != 2 {
 		utils.Loggers.Errorw(
