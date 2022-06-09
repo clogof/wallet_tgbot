@@ -53,7 +53,7 @@ func ShowCommand(chatId int64) (msg string) {
 	w := model.NewWallet(chatId)
 	msg, err := w.Show()
 	if err != nil {
-		msg = "Внутренняя ошибка"
+		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода Show",
 			"chat_id", chatId,
