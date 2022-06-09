@@ -36,6 +36,8 @@ func NewCommunication() (chan Params, chan Params) {
 			switch modeChat[d.ChatId] {
 			case add:
 				addGetParams(d)
+			case sub:
+				subGetParams(d)
 			default:
 				messageChan <- Params{ChatId: d.ChatId, Msg: "Некорректная строка"}
 			}
@@ -115,53 +117,62 @@ func addGetParams(p Params) {
 	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
 }
 
-func SubCommand(args []string, chat_id int64) (msg string) {
-	if len(args) != 3 {
-		msg = "Некорректная строка"
+func SubCommand(chatId int64) {
+	modeChat[chatId] = sub
+	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
+}
+
+func subGetParams(p Params) {
+	chatId := p.ChatId
+	args := strings.Split(p.Msg, " ")
+
+	defer delete(modeChat, p.ChatId)
+
+	if len(args) != 2 {
 		utils.Loggers.Errorw(
 			"некорректная строка",
 			"args", strings.Join(args, " "),
-			"chat_id", chat_id,
+			"chat_id", chatId,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: "Некорректная строка"}
 		return
 	}
 
-	coin := args[1]
-	sum, err := strconv.ParseFloat(args[2], 64)
+	coin := args[0]
+	sum, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
-		msg = "некорректная сумма"
 		utils.Loggers.Errorw(
-			"Некорректное значение суммы",
-			"val", args[2],
+			"некорректное значение суммы",
+			"val", args[1],
 			"err", err,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: "Некорректная сумма"}
 		return
 	}
 
-	w := model.NewWallet(chat_id)
+	w := model.NewWallet(chatId)
 	balance, err := w.Sub(coin, sum)
 
 	if errors.Is(err, model.ErrValLessZero) {
-		msg = model.ErrValLessZero.Error()
 		utils.Loggers.Infow(
 			"вычитаемое значение больше суммы в кошелке",
 			"sub_coin", coin,
 			"err", err,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: model.ErrValLessZero.Error()}
 		return
 	} else if err != nil {
-		msg = "Внутренняя ошибка"
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода Sub",
-			"chat_id", chat_id,
+			"chat_id", chatId,
 			"coin", coin,
 			"sum", sum,
 			"err", err,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		return
 	}
-	msg = fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)
-	return
+	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
 }
 
 func DelCommand(args []string, chat_id int64) (msg string) {
