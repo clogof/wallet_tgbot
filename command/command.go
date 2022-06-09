@@ -45,7 +45,7 @@ func NewCommunication() (chan Params, chan Params) {
 	return paramsCommandChan, messageChan
 }
 
-func ShowCommand(chatId int64) (msg string) {
+func ShowCommand(chatId int64) {
 	modeChat[chatId] = show
 
 	messageChan <- Params{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
@@ -62,13 +62,11 @@ func ShowCommand(chatId int64) (msg string) {
 		return
 	}
 	messageChan <- Params{ChatId: chatId, Msg: msg}
-	return
 }
 
-func AddCommand(chatId int64) (msg string) {
+func AddCommand(chatId int64) {
 	modeChat[chatId] = add
 	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
-	return
 }
 
 func addGetParams(p Params) {
