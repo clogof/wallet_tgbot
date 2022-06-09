@@ -146,14 +146,14 @@ func (w *wallet) Show() (string, error) {
 		price, priceUSDRUB, err := api.GetPrice(currencyUpper)
 		s := ""
 		if errors.Is(err, api.ErrGetRateCoin) {
-			s = fmt.Sprintf("%s: %f [ - USD - RUB]\n", currencyUpper, v.Value)
+			s = fmt.Sprintf("`%-4s`: %f \\[ - USD - RUB ]\n", currencyUpper, v.Value)
 		} else if errors.Is(err, api.ErrGetRateRUB) {
-			s = fmt.Sprintf("%s: %f [ %.2f USD - RUB]\n", currencyUpper, v.Value, price*v.Value)
+			s = fmt.Sprintf("`%-4s`: %f \\[ %.2f USD - RUB ]\n", currencyUpper, v.Value, price*v.Value)
 		} else if err != nil {
-			s = fmt.Sprintf("%s: %f [ - USD - RUB]\n", currencyUpper, v.Value)
+			s = fmt.Sprintf("`%-4s`: %f \\[ - USD - RUB ]\n", currencyUpper, v.Value)
 		} else {
 			s = fmt.Sprintf(
-				"%s: %f [%.2f USD %.2f RUB]\n",
+				"`%-4s`: %f \\[%.2f USD %.2f RUB ]\n",
 				currencyUpper, v.Value, price*v.Value, price*v.Value*priceUSDRUB)
 		}
 

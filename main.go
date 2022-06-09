@@ -36,7 +36,9 @@ func main() {
 
 	go func() {
 		for msg := range msgChan {
-			bot.Send(tgbotapi.NewMessage(msg.ChatId, msg.Msg))
+			m := tgbotapi.NewMessage(msg.ChatId, msg.Msg)
+			m.ParseMode = "markdown"
+			bot.Send(m)
 		}
 	}()
 
