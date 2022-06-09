@@ -38,6 +38,8 @@ func NewCommunication() (chan Params, chan Params) {
 				addGetParams(d)
 			case sub:
 				subGetParams(d)
+			case del:
+				delGetParams(d)
 			default:
 				messageChan <- Params{ChatId: d.ChatId, Msg: "Некорректная строка"}
 			}
@@ -175,37 +177,46 @@ func subGetParams(p Params) {
 	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
 }
 
-func DelCommand(args []string, chat_id int64) (msg string) {
-	if len(args) != 2 {
-		msg = "Некорректная строка"
+func DelCommand(chatId int64) {
+	modeChat[chatId] = del
+	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту\nНапример: btc"}
+}
+
+func delGetParams(p Params) {
+	chatId := p.ChatId
+	args := strings.Split(p.Msg, " ")
+
+	defer delete(modeChat, p.ChatId)
+
+	if len(args) != 1 {
 		utils.Loggers.Errorw(
 			"некорректная строка",
 			"args", strings.Join(args, " "),
-			"chat_id", chat_id,
+			"chat_id", chatId,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: "Некорректная строка"}
 		return
 	}
 
-	w := model.NewWallet(chat_id)
-	err := w.Delete(args[1])
+	w := model.NewWallet(chatId)
+	err := w.Delete(args[0])
 	if errors.Is(err, model.ErrNoRowsToDel) {
-		msg = model.ErrNoRowsToDel.Error()
 		utils.Loggers.Infow(
 			"Удаление валюты, отсутствующей в кошельке",
 			"err", err,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: model.ErrNoRowsToDel.Error()}
 		return
 	} else if err != nil {
-		msg = "Внутренняя ошибка"
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода Delete",
-			"chat_id", chat_id,
+			"chat_id", chatId,
 			"coin", args[1],
 			"err", err,
 		)
+		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		return
 	}
 
-	msg = "Валюта удалена"
-	return
+	messageChan <- Params{ChatId: chatId, Msg: "Валюта удалена"}
 }

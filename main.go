@@ -52,6 +52,8 @@ func main() {
 					command.AddCommand(msgChatId)
 				case "sub":
 					command.SubCommand(msgChatId)
+				case "del":
+					command.DelCommand(msgChatId)
 				}
 
 			} else {
