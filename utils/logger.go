@@ -19,7 +19,7 @@ func InitLogger(loggerPath string) error {
 
 	core := zapcore.NewCore(encoder, writerSyncer, zapcore.DebugLevel)
 
-	logger := zap.New(core)
+	logger := zap.New(core, zap.AddCaller())
 	Loggers = logger.Sugar()
 
 	return nil
@@ -28,7 +28,8 @@ func InitLogger(loggerPath string) error {
 func getEncoder() zapcore.Encoder {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
-	return zapcore.NewJSONEncoder(config)
+	config.EncodeLevel = zapcore.CapitalLevelEncoder
+	return zapcore.NewConsoleEncoder(config)
 }
 
 func getLogWriter(path string) (zapcore.WriteSyncer, error) {
