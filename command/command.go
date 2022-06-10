@@ -51,7 +51,6 @@ func NewCommunication() (chan Params, chan Params) {
 
 func ShowCommand(chatId int64) {
 	modeChat[chatId] = show
-	defer delete(modeChat, chatId)
 
 	messageChan <- Params{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
 
@@ -67,6 +66,7 @@ func ShowCommand(chatId int64) {
 		return
 	}
 	messageChan <- Params{ChatId: chatId, Msg: msg}
+	delete(modeChat, chatId)
 }
 
 func AddCommand(chatId int64) {
@@ -77,8 +77,6 @@ func AddCommand(chatId int64) {
 func addGetParams(p Params) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
-
-	defer delete(modeChat, p.ChatId)
 
 	if len(args) != 2 {
 		utils.Loggers.Errorw(
@@ -117,6 +115,7 @@ func addGetParams(p Params) {
 	}
 
 	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
+	delete(modeChat, p.ChatId)
 }
 
 func SubCommand(chatId int64) {
@@ -127,8 +126,6 @@ func SubCommand(chatId int64) {
 func subGetParams(p Params) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
-
-	defer delete(modeChat, p.ChatId)
 
 	if len(args) != 2 {
 		utils.Loggers.Errorw(
@@ -175,6 +172,7 @@ func subGetParams(p Params) {
 		return
 	}
 	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
+	delete(modeChat, p.ChatId)
 }
 
 func DelCommand(chatId int64) {
@@ -185,8 +183,6 @@ func DelCommand(chatId int64) {
 func delGetParams(p Params) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
-
-	defer delete(modeChat, p.ChatId)
 
 	if len(args) != 1 {
 		utils.Loggers.Errorw(
@@ -219,4 +215,5 @@ func delGetParams(p Params) {
 	}
 
 	messageChan <- Params{ChatId: chatId, Msg: "Валюта удалена"}
+	delete(modeChat, p.ChatId)
 }
