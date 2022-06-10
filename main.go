@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 	"wallet_tgbot/command"
+	"wallet_tgbot/tg"
 	"wallet_tgbot/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -21,16 +22,11 @@ func main() {
 		log.Fatalf("Error loading .env file:\n\t%s\n", err)
 	}
 
-	bot, err := tgbotapi.NewBotAPI(utils.TgToken)
+	bot, updates, err := tg.InitTgBot()
 	if err != nil {
 		log.Fatalf("Cannot create tgbot app:\n\t%s\n", err)
 	}
-
 	log.Printf("Authorized on account %s", bot.Self.UserName)
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := bot.GetUpdatesChan(u)
 
 	paramsChan, msgChan := command.NewCommunication()
 
