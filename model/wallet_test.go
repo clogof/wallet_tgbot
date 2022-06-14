@@ -177,6 +177,16 @@ func TestShow(t *testing.T) {
 	t.Log(balance)
 }
 
+func TestGetCurrency(t *testing.T) {
+	utils.InitEnvVar("../.env")
+
+	w := NewWallet(158911762)
+	params, err := w.GetCurrency()
+	require.Nil(t, err)
+
+	t.Log(params)
+}
+
 func add_t(chat_id int64, currency string, val float64) (old_val, new_val float64, err error) {
 	w := NewWallet(chat_id)
 

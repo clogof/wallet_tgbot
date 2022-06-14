@@ -170,3 +170,24 @@ func (w *wallet) Show() (string, error) {
 
 	return balance, nil
 }
+
+func (w *wallet) GetCurrency() ([]string, error) {
+	err := w.connect()
+	if err != nil {
+		return []string{}, err
+	}
+	defer w.conn.Close()
+
+	var temp_w []wallet
+	err = w.conn.Select(&temp_w, "select currency from wallet where chat_id = $1", w.ChatId)
+	if err != nil {
+		return []string{}, err
+	}
+
+	res := make([]string, len(temp_w))
+	for i, v := range temp_w {
+		res[i] = v.Currency
+	}
+
+	return res, nil
+}
