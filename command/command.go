@@ -18,20 +18,21 @@ const (
 
 var modeChat map[int64]int
 
-var paramsCommandChan chan Params
-var messageChan chan Params
+var paramsCommandChan chan ChatData
+var messageChan chan ChatData
 
-type Params struct {
+type ChatData struct {
 	ChatId int64
 	Msg    string
+	Params []string
 }
 
-func NewCommunication() (chan Params, chan Params) {
-	paramsCommandChan = make(chan Params)
-	messageChan = make(chan Params)
+func NewCommunication() (chan ChatData, chan ChatData) {
+	paramsCommandChan = make(chan ChatData)
+	messageChan = make(chan ChatData)
 	modeChat = make(map[int64]int)
 
-	go func(p chan Params) {
+	go func(p chan ChatData) {
 		for d := range p {
 			switch modeChat[d.ChatId] {
 			case add:
@@ -41,7 +42,7 @@ func NewCommunication() (chan Params, chan Params) {
 			case del:
 				delGetParams(d)
 			default:
-				messageChan <- Params{ChatId: d.ChatId, Msg: "Некорректная строка"}
+				messageChan <- ChatData{ChatId: d.ChatId, Msg: "Некорректная строка"}
 			}
 		}
 	}(paramsCommandChan)
@@ -52,12 +53,12 @@ func NewCommunication() (chan Params, chan Params) {
 func ShowCommand(chatId int64) {
 	modeChat[chatId] = show
 
-	messageChan <- Params{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
+	messageChan <- ChatData{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
 
 	w := model.NewWallet(chatId)
 	msg, err := w.Show()
 	if err != nil {
-		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода Show",
 			"chat_id", chatId,
@@ -65,16 +66,29 @@ func ShowCommand(chatId int64) {
 		)
 		return
 	}
-	messageChan <- Params{ChatId: chatId, Msg: msg}
+	messageChan <- ChatData{ChatId: chatId, Msg: msg}
 	delete(modeChat, chatId)
 }
 
 func AddCommand(chatId int64) {
 	modeChat[chatId] = add
-	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
+
+	w := model.NewWallet(chatId)
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"chat_id", chatId,
+		)
+		messageChan <- ChatData{ChatId: chatId, Msg: "Не удалось получить валюты"}
+		return
+	}
+
+	messageChan <- ChatData{
+		ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3", Params: p}
 }
 
-func addGetParams(p Params) {
+func addGetParams(p ChatData) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
 
@@ -84,14 +98,14 @@ func addGetParams(p Params) {
 			"args", p.Msg,
 			"chat_id", chatId,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Некорректная строка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
 		return
 	}
 
 	coin := args[0]
 	sum, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
-		messageChan <- Params{ChatId: chatId, Msg: "Некорректная сумма"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная сумма"}
 		utils.Loggers.Errorw(
 			"некорректное значение суммы",
 			"val", args[1],
@@ -110,20 +124,20 @@ func addGetParams(p Params) {
 			"sum", sum,
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		return
 	}
 
-	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
+	messageChan <- ChatData{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
 	delete(modeChat, p.ChatId)
 }
 
 func SubCommand(chatId int64) {
 	modeChat[chatId] = sub
-	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
+	messageChan <- ChatData{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
 }
 
-func subGetParams(p Params) {
+func subGetParams(p ChatData) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
 
@@ -133,7 +147,7 @@ func subGetParams(p Params) {
 			"args", strings.Join(args, " "),
 			"chat_id", chatId,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Некорректная строка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
 		return
 	}
 
@@ -145,7 +159,7 @@ func subGetParams(p Params) {
 			"val", args[1],
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Некорректная сумма"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная сумма"}
 		return
 	}
 
@@ -158,7 +172,7 @@ func subGetParams(p Params) {
 			"sub_coin", coin,
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: model.ErrValLessZero.Error()}
+		messageChan <- ChatData{ChatId: chatId, Msg: model.ErrValLessZero.Error()}
 		return
 	} else if err != nil {
 		utils.Loggers.Errorw(
@@ -168,19 +182,19 @@ func subGetParams(p Params) {
 			"sum", sum,
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		return
 	}
-	messageChan <- Params{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
+	messageChan <- ChatData{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
 	delete(modeChat, p.ChatId)
 }
 
 func DelCommand(chatId int64) {
 	modeChat[chatId] = del
-	messageChan <- Params{ChatId: chatId, Msg: "Введите валюту\nНапример: btc"}
+	messageChan <- ChatData{ChatId: chatId, Msg: "Введите валюту\nНапример: btc"}
 }
 
-func delGetParams(p Params) {
+func delGetParams(p ChatData) {
 	chatId := p.ChatId
 	args := strings.Split(p.Msg, " ")
 
@@ -190,7 +204,7 @@ func delGetParams(p Params) {
 			"args", strings.Join(args, " "),
 			"chat_id", chatId,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Некорректная строка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
 		return
 	}
 
@@ -201,7 +215,7 @@ func delGetParams(p Params) {
 			"Удаление валюты, отсутствующей в кошельке",
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: model.ErrNoRowsToDel.Error()}
+		messageChan <- ChatData{ChatId: chatId, Msg: model.ErrNoRowsToDel.Error()}
 		return
 	} else if err != nil {
 		utils.Loggers.Errorw(
@@ -210,10 +224,10 @@ func delGetParams(p Params) {
 			"coin", args[1],
 			"err", err,
 		)
-		messageChan <- Params{ChatId: chatId, Msg: "Внутренняя ошибка"}
+		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
 		return
 	}
 
-	messageChan <- Params{ChatId: chatId, Msg: "Валюта удалена"}
+	messageChan <- ChatData{ChatId: chatId, Msg: "Валюта удалена"}
 	delete(modeChat, p.ChatId)
 }
