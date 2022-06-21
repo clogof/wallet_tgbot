@@ -20,16 +20,16 @@ func InitTgBot() (bot *tgbotapi.BotAPI, updates tgbotapi.UpdatesChannel, err err
 	return
 }
 
-func CreateMessage(msg command.ChatData) tgbotapi.MessageConfig {
-	m := tgbotapi.NewMessage(msg.ChatId, msg.Msg)
+func CreateMessage(msg *command.User) tgbotapi.MessageConfig {
+	m := tgbotapi.NewMessage(msg.ChatID, msg.ToClient.Message)
 	m.ParseMode = "markdown"
 
 	var numericKeyboard tgbotapi.InlineKeyboardMarkup
-	if len(msg.Params) > 0 {
+	if len(msg.ToClient.Args) > 0 {
 		numericKeyboard = tgbotapi.NewInlineKeyboardMarkup()
 		columnCount := 1
 
-		for i, v := range msg.Params {
+		for i, v := range msg.ToClient.Args {
 			if i%columnCount == 0 {
 				numericKeyboard.InlineKeyboard = append(
 					numericKeyboard.InlineKeyboard,
@@ -42,9 +42,8 @@ func CreateMessage(msg command.ChatData) tgbotapi.MessageConfig {
 				tgbotapi.NewInlineKeyboardButtonData(v, v),
 			)
 		}
+		m.ReplyMarkup = numericKeyboard
 	}
-
-	m.ReplyMarkup = numericKeyboard
 
 	return m
 }

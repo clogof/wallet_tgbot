@@ -6,19 +6,16 @@ import (
 	"wallet_tgbot/command"
 	"wallet_tgbot/tg"
 	"wallet_tgbot/utils"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
+	var err error
 
-	err := utils.InitLogger("./logs/test.log")
-	if err != nil {
+	if err = utils.InitLogger("./logs/test.log"); err != nil {
 		log.Fatalf("Cannot create logger:\n\t%s\n", err)
 	}
 
-	err = utils.InitEnvVar()
-	if err != nil {
+	if err = utils.InitEnvVar(); err != nil {
 		log.Fatalf("Error loading .env file:\n\t%s\n", err)
 	}
 
@@ -28,12 +25,12 @@ func main() {
 	}
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	paramsChan, msgChan := command.NewCommunication()
+	fromClientChan, toClientChan := command.NewCommunication()
+	users := make(map[int64]*command.User)
 
 	go func() {
-		for msg := range msgChan {
-			m := tgbotapi.NewMessage(msg.ChatId, msg.Msg)
-			m.ParseMode = "markdown"
+		for msg := range toClientChan {
+			m := tg.CreateMessage(msg)
 			bot.Send(m)
 		}
 	}()
@@ -42,22 +39,29 @@ func main() {
 		if update.Message != nil {
 			msgChatId := update.Message.Chat.ID
 
+			if _, ok := users[msgChatId]; !ok {
+				users[msgChatId] = command.NewUser(msgChatId)
+			}
+
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
-				case "show":
-					command.ShowCommand(msgChatId)
 				case "add":
-					command.AddCommand(msgChatId)
-				case "sub":
-					command.SubCommand(msgChatId)
-				case "del":
-					command.DelCommand(msgChatId)
+					users[msgChatId].FromClient = command.FromClientMessage{}
+					users[msgChatId].State.Event("toAdd")
+					fromClientChan <- users[msgChatId]
+				default:
 				}
-
 			} else {
-				params := strings.ToLower(update.Message.Text)
-				paramsChan <- command.Params{ChatId: msgChatId, Msg: params}
+				m := strings.ToLower(update.Message.Text)
+				users[msgChatId].FromClient = command.FromClientMessage{Message: m}
+				fromClientChan <- users[msgChatId]
 			}
+		} else if update.CallbackQuery != nil {
+			msgChatId := update.CallbackQuery.Message.Chat.ID
+			data := update.CallbackQuery.Data
+
+			users[msgChatId].FromClient = command.FromClientMessage{Message: data}
+			fromClientChan <- users[msgChatId]
 		}
 	}
 }
