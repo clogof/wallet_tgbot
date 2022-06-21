@@ -26,10 +26,10 @@ type ToClientMessage struct {
 }
 
 const (
-	add  = "add"
-	coin = "coin"
-	val  = "val"
-	menu = "menu"
+	AddCommand  = "add"
+	CoinCommand = "coin"
+	ValCommand  = "val"
+	MenuCommand = "menu"
 )
 
 var toClientChan chan *User
@@ -42,19 +42,19 @@ func NewCommunication() (chan *User, chan *User) {
 		var err error
 		for u := range fromCl {
 			switch u.State.Current() {
-			case add:
+			case AddCommand:
 				err = u.Add()
 				if err != nil {
 					fmt.Printf("err: %s\n", err)
 				}
 				u.State.Event("toCoin")
-			case coin:
+			case CoinCommand:
 				err = u.Coin()
 				if err != nil {
 					fmt.Printf("err: %s\n", err)
 				}
 				u.State.Event("toVal")
-			case val:
+			case ValCommand:
 				err = u.Val()
 				if err != nil {
 					fmt.Printf("err: %s\n", err)
@@ -71,11 +71,11 @@ func NewUser(chatId int64) *User {
 	u := &User{ChatID: chatId}
 
 	u.State = fsm.NewFSM(
-		menu,
+		MenuCommand,
 		fsm.Events{
-			{Name: "toAdd", Src: []string{add, coin, val, menu}, Dst: add},
-			{Name: "toCoin", Src: []string{add}, Dst: coin},
-			{Name: "toVal", Src: []string{coin}, Dst: val},
+			{Name: "toAdd", Src: []string{AddCommand, CoinCommand, ValCommand, MenuCommand}, Dst: AddCommand},
+			{Name: "toCoin", Src: []string{AddCommand}, Dst: CoinCommand},
+			{Name: "toVal", Src: []string{CoinCommand}, Dst: ValCommand},
 		},
 		fsm.Callbacks{},
 	)

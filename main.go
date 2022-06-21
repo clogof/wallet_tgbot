@@ -45,7 +45,7 @@ func main() {
 
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
-				case "add":
+				case command.AddCommand:
 					users[msgChatId].FromClient = command.FromClientMessage{}
 					users[msgChatId].State.Event("toAdd")
 					fromClientChan <- users[msgChatId]
