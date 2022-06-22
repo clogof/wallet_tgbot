@@ -59,6 +59,7 @@ func NewCommunication() (chan *User, chan *User) {
 				if err != nil {
 					fmt.Printf("err: %s\n", err)
 				}
+				u.State.Event("toMenu")
 			default:
 			}
 		}
@@ -76,6 +77,7 @@ func NewUser(chatId int64) *User {
 			{Name: "toAdd", Src: []string{AddCommand, CoinCommand, ValCommand, MenuCommand}, Dst: AddCommand},
 			{Name: "toCoin", Src: []string{AddCommand}, Dst: CoinCommand},
 			{Name: "toVal", Src: []string{CoinCommand}, Dst: ValCommand},
+			{Name: "toMenu", Src: []string{AddCommand, CoinCommand, ValCommand}, Dst: MenuCommand},
 		},
 		fsm.Callbacks{},
 	)
