@@ -29,19 +29,23 @@ type ToClientMessage struct {
 }
 
 const (
-	AddCommand   = "add"
-	SubCommand   = "sub"
-	CoinCommand  = "coin"
-	ValCommand   = "val"
-	StartCommand = "start"
+	AddCommand     = "add"
+	SubCommand     = "sub"
+	DelCommand     = "del"
+	DelMakeCommand = "delMake"
+	CoinCommand    = "coin"
+	ValCommand     = "val"
+	StartCommand   = "start"
 )
 
 const (
-	ToAdd   = "toAdd"
-	ToSub   = "toSub"
-	ToCoin  = "toCoin"
-	ToVal   = "toVal"
-	ToStart = "toStart"
+	ToAdd     = "toAdd"
+	ToSub     = "toSub"
+	ToDel     = "toDel"
+	ToDelMake = "toDelMake"
+	ToCoin    = "toCoin"
+	ToVal     = "toVal"
+	ToStart   = "toStart"
 )
 
 var toClientChan chan *User
@@ -69,6 +73,18 @@ func NewCommunication() (chan *User, chan *User) {
 					break
 				}
 				u.State.Event(ToCoin)
+			case DelCommand:
+				err := u.Delete()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToDelMake)
+			case DelMakeCommand:
+				err := u.DelMake()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToStart)
 			case CoinCommand:
 				err = u.Coin()
 				if err != nil {
@@ -92,14 +108,18 @@ func NewCommunication() (chan *User, chan *User) {
 func NewUser(chatId int64) *User {
 	u := &User{ChatID: chatId}
 
+	allStates := []string{AddCommand, CoinCommand, SubCommand, DelCommand, DelMakeCommand, ValCommand, StartCommand}
+
 	u.State = fsm.NewFSM(
 		StartCommand,
 		fsm.Events{
-			{Name: ToAdd, Src: []string{AddCommand, CoinCommand, SubCommand, ValCommand, StartCommand}, Dst: AddCommand},
-			{Name: ToSub, Src: []string{AddCommand, CoinCommand, SubCommand, ValCommand, StartCommand}, Dst: SubCommand},
+			{Name: ToAdd, Src: allStates, Dst: AddCommand},
+			{Name: ToSub, Src: allStates, Dst: SubCommand},
+			{Name: ToDel, Src: allStates, Dst: DelCommand},
+			{Name: ToDelMake, Src: []string{DelCommand}, Dst: DelMakeCommand},
 			{Name: ToCoin, Src: []string{AddCommand, SubCommand}, Dst: CoinCommand},
 			{Name: ToVal, Src: []string{CoinCommand}, Dst: ValCommand},
-			{Name: ToStart, Src: []string{AddCommand, CoinCommand, ValCommand}, Dst: StartCommand},
+			{Name: ToStart, Src: allStates, Dst: StartCommand},
 		},
 		fsm.Callbacks{},
 	)
@@ -148,6 +168,54 @@ func (u *User) Sub() error {
 	u.State.SetMetadata("prev_state", "sub")
 	toClientChan <- u
 
+	return nil
+}
+
+func (u *User) Delete() error {
+	w := model.NewWallet(u.ChatID)
+
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"err", err,
+			"chatID", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось получить валюты\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
+
+	m := "Выберите валюту из списка"
+	u.ToClient = ToClientMessage{Message: m, Args: p}
+	toClientChan <- u
+
+	return nil
+}
+
+func (u *User) DelMake() error {
+	w := model.NewWallet(u.ChatID)
+
+	c, _ := u.State.Metadata("callback")
+	if !c.(bool) {
+		u.ToClient = ToClientMessage{Message: "Выберите значение из списка выше"}
+		toClientChan <- u
+		return errors.New("")
+	}
+
+	err := w.Delete(u.FromClient.Message)
+	if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка",
+			"err", err,
+			"chatШВ", u.ChatID,
+			"coin", u.FromClient.Message,
+		)
+	}
+
+	m := "Валюта " + u.FromClient.Message + " удалена"
+	u.ToClient = ToClientMessage{Message: m}
+	toClientChan <- u
 	return nil
 }
 

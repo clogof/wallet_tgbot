@@ -112,6 +112,7 @@ func (w *wallet) Delete(coin string) error {
 	}
 	defer w.conn.Close()
 
+	coin = strings.ToLower(coin)
 	query := "delete from wallet where chat_id=$1 and currency=$2"
 	res, err := w.conn.Exec(query, w.ChatId, coin)
 	if err != nil {
@@ -181,7 +182,7 @@ func (w *wallet) GetCurrency() ([]string, error) {
 	defer w.conn.Close()
 
 	var temp_w []wallet
-	err = w.conn.Select(&temp_w, "select upper(currency) as currency from wallet where chat_id = $1", w.ChatId)
+	err = w.conn.Select(&temp_w, "select upper(currency) as currency from wallet where chat_id = $1 order by currency", w.ChatId)
 	if err != nil {
 		return []string{}, err
 	}

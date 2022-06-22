@@ -51,6 +51,10 @@ func main() {
 					users[msgChatId].FromClient = command.FromClientMessage{}
 					users[msgChatId].State.Event(command.ToSub)
 					fromClientChan <- users[msgChatId]
+				case command.DelCommand:
+					users[msgChatId].FromClient = command.FromClientMessage{}
+					users[msgChatId].State.Event(command.ToDel)
+					fromClientChan <- users[msgChatId]
 				default:
 					m := "Некорректна команда\nВоспользуйтесь меню"
 					users[msgChatId].ToClient = command.ToClientMessage{Message: m}
