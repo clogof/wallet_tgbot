@@ -19,19 +19,17 @@ func main() {
 		log.Fatalf("Error loading .env file:\n\t%s\n", err)
 	}
 
-	bot, updates, err := tg.InitTgBot()
+	updates, err := tg.InitTgBot()
 	if err != nil {
 		log.Fatalf("Cannot create tgbot app:\n\t%s\n", err)
 	}
-	log.Printf("Authorized on account %s", bot.Self.UserName)
 
 	fromClientChan, toClientChan := command.NewCommunication()
 	users := make(map[int64]*command.User)
 
 	go func() {
 		for msg := range toClientChan {
-			m := tg.CreateMessage(msg)
-			bot.Send(m)
+			tg.SendMessage(msg)
 		}
 	}()
 
@@ -59,6 +57,13 @@ func main() {
 		} else if update.CallbackQuery != nil {
 			msgChatId := update.CallbackQuery.Message.Chat.ID
 			data := update.CallbackQuery.Data
+
+			tg.CheckCallback(&command.User{
+				ChatID: msgChatId,
+				FromClient: command.FromClientMessage{
+					Message: data,
+					Args:    []string{update.CallbackQuery.ID}}},
+			)
 
 			users[msgChatId].FromClient = command.FromClientMessage{Message: data}
 			fromClientChan <- users[msgChatId]
