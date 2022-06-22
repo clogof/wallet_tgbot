@@ -47,6 +47,10 @@ func main() {
 					users[msgChatId].FromClient = command.FromClientMessage{}
 					users[msgChatId].State.Event(command.ToAdd)
 					fromClientChan <- users[msgChatId]
+				case command.SubCommand:
+					users[msgChatId].FromClient = command.FromClientMessage{}
+					users[msgChatId].State.Event(command.ToSub)
+					fromClientChan <- users[msgChatId]
 				default:
 					m := "Некорректна команда\nВоспользуйтесь меню"
 					users[msgChatId].ToClient = command.ToClientMessage{Message: m}
@@ -55,6 +59,7 @@ func main() {
 			} else {
 				m := strings.ToLower(update.Message.Text)
 				users[msgChatId].FromClient = command.FromClientMessage{Message: m}
+				users[msgChatId].State.SetMetadata("callback", false)
 				fromClientChan <- users[msgChatId]
 			}
 		} else if update.CallbackQuery != nil {
@@ -69,6 +74,7 @@ func main() {
 			)
 
 			users[msgChatId].FromClient = command.FromClientMessage{Message: data}
+			users[msgChatId].State.SetMetadata("callback", true)
 			fromClientChan <- users[msgChatId]
 		}
 	}

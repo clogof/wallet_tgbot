@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ type ToClientMessage struct {
 
 const (
 	AddCommand   = "add"
+	SubCommand   = "sub"
 	CoinCommand  = "coin"
 	ValCommand   = "val"
 	StartCommand = "start"
@@ -36,6 +38,7 @@ const (
 
 const (
 	ToAdd   = "toAdd"
+	ToSub   = "toSub"
 	ToCoin  = "toCoin"
 	ToVal   = "toVal"
 	ToStart = "toStart"
@@ -56,6 +59,12 @@ func NewCommunication() (chan *User, chan *User) {
 				toClientChan <- u
 			case AddCommand:
 				err = u.Add()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToCoin)
+			case SubCommand:
+				err = u.Sub()
 				if err != nil {
 					break
 				}
@@ -86,8 +95,9 @@ func NewUser(chatId int64) *User {
 	u.State = fsm.NewFSM(
 		StartCommand,
 		fsm.Events{
-			{Name: ToAdd, Src: []string{AddCommand, CoinCommand, ValCommand, StartCommand}, Dst: AddCommand},
-			{Name: ToCoin, Src: []string{AddCommand}, Dst: CoinCommand},
+			{Name: ToAdd, Src: []string{AddCommand, CoinCommand, SubCommand, ValCommand, StartCommand}, Dst: AddCommand},
+			{Name: ToSub, Src: []string{AddCommand, CoinCommand, SubCommand, ValCommand, StartCommand}, Dst: SubCommand},
+			{Name: ToCoin, Src: []string{AddCommand, SubCommand}, Dst: CoinCommand},
 			{Name: ToVal, Src: []string{CoinCommand}, Dst: ValCommand},
 			{Name: ToStart, Src: []string{AddCommand, CoinCommand, ValCommand}, Dst: StartCommand},
 		},
@@ -113,12 +123,45 @@ func (u *User) Add() error {
 
 	m := "Выберите валюту из списка,\nлибо введите имя новой"
 	u.ToClient = ToClientMessage{Message: m, Args: p}
+	u.State.SetMetadata("prev_state", "add")
 	toClientChan <- u
+	return nil
+}
+
+func (u *User) Sub() error {
+	w := model.NewWallet(u.ChatID)
+
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"err", err,
+			"chatID", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось получить валюты\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
+
+	m := "Выберите валюту из списка"
+	u.ToClient = ToClientMessage{Message: m, Args: p}
+	u.State.SetMetadata("prev_state", "sub")
+	toClientChan <- u
+
 	return nil
 }
 
 func (u *User) Coin() error {
 	u.State.SetMetadata("coin", strings.ToUpper(u.FromClient.Message))
+
+	p, _ := u.State.Metadata("prev_state")
+	c, _ := u.State.Metadata("callback")
+	if p.(string) == "sub" && !c.(bool) {
+		u.ToClient = ToClientMessage{Message: "Выберите значение из списка выше"}
+		toClientChan <- u
+		return errors.New("")
+	}
+
 	u.ToClient = ToClientMessage{Message: "Введите добавляемое/отнимаемое значение"}
 	toClientChan <- u
 	return nil
@@ -138,12 +181,30 @@ func (u *User) Val() error {
 	}
 
 	w := model.NewWallet(u.ChatID)
+
 	coin, _ := u.State.Metadata("coin")
 	coinS := coin.(string)
-	u.State.SetMetadata("coin", "")
 
-	balance, err := w.Add(coinS, sum)
-	if err != nil {
+	prevState, _ := u.State.Metadata("prev_state")
+	prevStateS := prevState.(string)
+
+	var balance float64
+	if prevStateS == "add" {
+		balance, err = w.Add(coinS, sum)
+	} else if prevStateS == "sub" {
+		balance, err = w.Sub(coinS, sum)
+	}
+
+	if errors.Is(err, model.ErrValLessZero) {
+		utils.Loggers.Errorw(
+			"вычитаемое значение больше суммы в кошелке",
+			"err", err,
+		)
+		m := "Вычитаемое значение больше суммы в кошелке\nВведи сумму меньше"
+		u.ToClient = ToClientMessage{Message: m}
+		toClientChan <- u
+		return err
+	} else if err != nil {
 		utils.Loggers.Errorw(
 			"внутренняя ошибка метода",
 			"err", err,
@@ -155,6 +216,9 @@ func (u *User) Val() error {
 		toClientChan <- u
 		return err
 	}
+
+	u.State.SetMetadata("coin", "")
+	u.State.SetMetadata("prev_state", "")
 
 	u.ToClient = ToClientMessage{Message: fmt.Sprintf("Баланс %s: %f", coinS, balance)}
 	toClientChan <- u

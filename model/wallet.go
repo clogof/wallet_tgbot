@@ -79,6 +79,7 @@ func (w *wallet) Sub(coin string, val float64) (float64, error) {
 	}
 	defer w.conn.Close()
 
+	coin = strings.ToLower(coin)
 	temp_w := wallet{ChatId: w.ChatId, Currency: coin, Value: 0}
 
 	err = w.conn.Get(
