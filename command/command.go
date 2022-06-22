@@ -1,234 +1,324 @@
 package command
 
-// import (
-// 	"errors"
-// 	"fmt"
-// 	"strconv"
-// 	"strings"
-// 	"wallet_tgbot/model"
-// 	"wallet_tgbot/utils"
-// )
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"wallet_tgbot/model"
+	"wallet_tgbot/utils"
 
-// const (
-// 	show = iota + 1
-// 	add
-// 	sub
-// 	del
-// )
+	"github.com/looplab/fsm"
+)
 
-// var modeChat map[int64]int
+type User struct {
+	ChatID     int64
+	FromClient FromClientMessage
+	ToClient   ToClientMessage
+	State      *fsm.FSM
+}
 
-// var paramsCommandChan chan ChatData
-// var messageChan chan ChatData
+type FromClientMessage struct {
+	Message string
+	Args    []string
+}
 
-// type ChatData struct {
-// 	ChatId int64
-// 	Msg    string
-// 	Params []string
-// }
+type ToClientMessage struct {
+	Message string
+	Args    []string
+}
 
-// func NewCommunication() (chan ChatData, chan ChatData) {
-// 	paramsCommandChan = make(chan ChatData)
-// 	messageChan = make(chan ChatData)
-// 	modeChat = make(map[int64]int)
+const (
+	AddCommand     = "add"
+	SubCommand     = "sub"
+	DelCommand     = "del"
+	DelMakeCommand = "delMake"
+	ShowCommand    = "show"
+	CoinCommand    = "coin"
+	ValCommand     = "val"
+	StartCommand   = "start"
+)
 
-// 	go func(p chan ChatData) {
-// 		for d := range p {
-// 			fmt.Println(d)
-// 			// 		switch modeChat[d.ChatId] {
-// 			// 		case add:
-// 			// 			addGetParams(d)
-// 			// 		case sub:
-// 			// 			subGetParams(d)
-// 			// 		case del:
-// 			// 			delGetParams(d)
-// 			// 		default:
-// 			// 			messageChan <- ChatData{ChatId: d.ChatId, Msg: "Некорректная строка"}
-// 			// 		}
-// 		}
-// 	}(paramsCommandChan)
+const (
+	ToAdd     = "toAdd"
+	ToSub     = "toSub"
+	ToDel     = "toDel"
+	ToDelMake = "toDelMake"
+	ToShow    = "toShow"
+	ToCoin    = "toCoin"
+	ToVal     = "toVal"
+	ToStart   = "toStart"
+)
 
-// 	return paramsCommandChan, messageChan
-// }
+var toClientChan chan *User
 
-// func ShowCommand(chatId int64) {
-// 	modeChat[chatId] = show
+func NewCommunication() (chan *User, chan *User) {
+	fromClientChan := make(chan *User)
+	toClientChan = make(chan *User)
 
-// 	messageChan <- ChatData{ChatId: chatId, Msg: "Получаем актуальные данные курса валют"}
+	go func(fromCl chan *User) {
+		var err error
+		for u := range fromCl {
+			switch u.State.Current() {
+			case StartCommand:
+				u.ToClient = ToClientMessage{Message: "Воспользуйтесь меню для выбора команды"}
+				toClientChan <- u
+			case AddCommand:
+				err = u.Add()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToCoin)
+			case SubCommand:
+				err = u.Sub()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToCoin)
+			case DelCommand:
+				err := u.Delete()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToDelMake)
+			case DelMakeCommand:
+				err := u.DelMake()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToStart)
+			case ShowCommand:
+				u.Show()
+			case CoinCommand:
+				err = u.Coin()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToVal)
+			case ValCommand:
+				err = u.Val()
+				if err != nil {
+					break
+				}
+				u.State.Event(ToStart)
+			default:
+			}
+		}
+	}(fromClientChan)
 
-// 	w := model.NewWallet(chatId)
-// 	msg, err := w.Show()
-// 	if err != nil {
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
-// 		utils.Loggers.Errorw(
-// 			"внутренняя ошибка метода Show",
-// 			"chat_id", chatId,
-// 			"err", err,
-// 		)
-// 		return
-// 	}
-// 	messageChan <- ChatData{ChatId: chatId, Msg: msg}
-// 	delete(modeChat, chatId)
-// }
+	return fromClientChan, toClientChan
+}
 
-// func AddCommand(chatId int64) {
-// 	modeChat[chatId] = add
+func NewUser(chatId int64) *User {
+	u := &User{ChatID: chatId}
 
-// 	w := model.NewWallet(chatId)
-// 	p, err := w.GetCurrency()
-// 	if err != nil {
-// 		utils.Loggers.Errorw(
-// 			"не удалось получить валюты пользователя",
-// 			"chat_id", chatId,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Не удалось получить валюты"}
-// 		return
-// 	}
+	allStates := []string{ShowCommand, AddCommand, CoinCommand, SubCommand, DelCommand, DelMakeCommand, ValCommand, StartCommand}
 
-// 	messageChan <- ChatData{
-// 		ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3", Params: p}
-// }
+	u.State = fsm.NewFSM(
+		StartCommand,
+		fsm.Events{
+			{Name: ToAdd, Src: allStates, Dst: AddCommand},
+			{Name: ToSub, Src: allStates, Dst: SubCommand},
+			{Name: ToDel, Src: allStates, Dst: DelCommand},
+			{Name: ToShow, Src: allStates, Dst: ShowCommand},
+			{Name: ToDelMake, Src: []string{DelCommand}, Dst: DelMakeCommand},
+			{Name: ToCoin, Src: []string{AddCommand, SubCommand}, Dst: CoinCommand},
+			{Name: ToVal, Src: []string{CoinCommand}, Dst: ValCommand},
+			{Name: ToStart, Src: allStates, Dst: StartCommand},
+		},
+		fsm.Callbacks{},
+	)
+	return u
+}
 
-// func addGetParams(p ChatData) {
-// 	chatId := p.ChatId
-// 	args := strings.Split(p.Msg, " ")
+func (u *User) Add() error {
+	w := model.NewWallet(u.ChatID)
 
-// 	if len(args) != 2 {
-// 		utils.Loggers.Errorw(
-// 			"некорректная строка",
-// 			"args", p.Msg,
-// 			"chat_id", chatId,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
-// 		return
-// 	}
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"err", err,
+			"chatID", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось получить валюты\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
 
-// 	coin := args[0]
-// 	sum, err := strconv.ParseFloat(args[1], 64)
-// 	if err != nil {
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная сумма"}
-// 		utils.Loggers.Errorw(
-// 			"некорректное значение суммы",
-// 			"val", args[1],
-// 			"err", err,
-// 		)
-// 		return
-// 	}
+	m := "Выберите валюту из списка,\nлибо введите имя новой"
+	u.ToClient = ToClientMessage{Message: m, Args: p}
+	u.State.SetMetadata("prev_state", "add")
+	toClientChan <- u
+	return nil
+}
 
-// 	w := model.NewWallet(chatId)
-// 	balance, err := w.Add(coin, sum)
-// 	if err != nil {
-// 		utils.Loggers.Errorw(
-// 			"внутренняя ошибка метода Add",
-// 			"chat_id", chatId,
-// 			"coin", coin,
-// 			"sum", sum,
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
-// 		return
-// 	}
+func (u *User) Sub() error {
+	w := model.NewWallet(u.ChatID)
 
-// 	messageChan <- ChatData{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
-// 	delete(modeChat, p.ChatId)
-// }
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"err", err,
+			"chatID", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось получить валюты\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
 
-// func SubCommand(chatId int64) {
-// 	modeChat[chatId] = sub
-// 	messageChan <- ChatData{ChatId: chatId, Msg: "Введите валюту и сумму\nНапример: btc 4.3"}
-// }
+	m := "Выберите валюту из списка"
+	u.ToClient = ToClientMessage{Message: m, Args: p}
+	u.State.SetMetadata("prev_state", "sub")
+	toClientChan <- u
 
-// func subGetParams(p ChatData) {
-// 	chatId := p.ChatId
-// 	args := strings.Split(p.Msg, " ")
+	return nil
+}
 
-// 	if len(args) != 2 {
-// 		utils.Loggers.Errorw(
-// 			"некорректная строка",
-// 			"args", strings.Join(args, " "),
-// 			"chat_id", chatId,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
-// 		return
-// 	}
+func (u *User) Delete() error {
+	w := model.NewWallet(u.ChatID)
 
-// 	coin := args[0]
-// 	sum, err := strconv.ParseFloat(args[1], 64)
-// 	if err != nil {
-// 		utils.Loggers.Errorw(
-// 			"некорректное значение суммы",
-// 			"val", args[1],
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная сумма"}
-// 		return
-// 	}
+	p, err := w.GetCurrency()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"не удалось получить валюты пользователя",
+			"err", err,
+			"chatID", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось получить валюты\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
 
-// 	w := model.NewWallet(chatId)
-// 	balance, err := w.Sub(coin, sum)
+	m := "Выберите валюту из списка"
+	u.ToClient = ToClientMessage{Message: m, Args: p}
+	toClientChan <- u
 
-// 	if errors.Is(err, model.ErrValLessZero) {
-// 		utils.Loggers.Infow(
-// 			"вычитаемое значение больше суммы в кошелке",
-// 			"sub_coin", coin,
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: model.ErrValLessZero.Error()}
-// 		return
-// 	} else if err != nil {
-// 		utils.Loggers.Errorw(
-// 			"внутренняя ошибка метода Sub",
-// 			"chat_id", chatId,
-// 			"coin", coin,
-// 			"sum", sum,
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
-// 		return
-// 	}
-// 	messageChan <- ChatData{ChatId: chatId, Msg: fmt.Sprintf("Баланс %s: %f", strings.ToUpper(coin), balance)}
-// 	delete(modeChat, p.ChatId)
-// }
+	return nil
+}
 
-// func DelCommand(chatId int64) {
-// 	modeChat[chatId] = del
-// 	messageChan <- ChatData{ChatId: chatId, Msg: "Введите валюту\nНапример: btc"}
-// }
+func (u *User) DelMake() error {
+	w := model.NewWallet(u.ChatID)
 
-// func delGetParams(p ChatData) {
-// 	chatId := p.ChatId
-// 	args := strings.Split(p.Msg, " ")
+	c, _ := u.State.Metadata("callback")
+	if !c.(bool) {
+		u.ToClient = ToClientMessage{Message: "Выберите значение из списка выше"}
+		toClientChan <- u
+		return errors.New("")
+	}
 
-// 	if len(args) != 1 {
-// 		utils.Loggers.Errorw(
-// 			"некорректная строка",
-// 			"args", strings.Join(args, " "),
-// 			"chat_id", chatId,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Некорректная строка"}
-// 		return
-// 	}
+	err := w.Delete(u.FromClient.Message)
+	if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка",
+			"err", err,
+			"chatID", u.ChatID,
+			"coin", u.FromClient.Message,
+		)
+		u.ToClient = ToClientMessage{Message: "Не удалось удалить валюту\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
 
-// 	w := model.NewWallet(chatId)
-// 	err := w.Delete(args[0])
-// 	if errors.Is(err, model.ErrNoRowsToDel) {
-// 		utils.Loggers.Infow(
-// 			"Удаление валюты, отсутствующей в кошельке",
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: model.ErrNoRowsToDel.Error()}
-// 		return
-// 	} else if err != nil {
-// 		utils.Loggers.Errorw(
-// 			"внутренняя ошибка метода Delete",
-// 			"chat_id", chatId,
-// 			"coin", args[1],
-// 			"err", err,
-// 		)
-// 		messageChan <- ChatData{ChatId: chatId, Msg: "Внутренняя ошибка"}
-// 		return
-// 	}
+	m := "Валюта " + u.FromClient.Message + " удалена"
+	u.ToClient = ToClientMessage{Message: m}
+	toClientChan <- u
+	return nil
+}
 
-// 	messageChan <- ChatData{ChatId: chatId, Msg: "Валюта удалена"}
-// 	delete(modeChat, p.ChatId)
-// }
+func (u *User) Show() {
+	w := model.NewWallet(u.ChatID)
+
+	u.ToClient = ToClientMessage{Message: "Получаем актуальные данные курса валют"}
+	toClientChan <- u
+
+	data, err := w.Show()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка",
+			"err", err,
+			"chat_id", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Внутренняя ошибка\nПопробуйте позже"}
+		toClientChan <- u
+		return
+	}
+
+	u.ToClient = ToClientMessage{Message: data}
+	toClientChan <- u
+}
+
+func (u *User) Coin() error {
+	u.State.SetMetadata("coin", strings.ToUpper(u.FromClient.Message))
+
+	p, _ := u.State.Metadata("prev_state")
+	c, _ := u.State.Metadata("callback")
+	if p.(string) == "sub" && !c.(bool) {
+		u.ToClient = ToClientMessage{Message: "Выберите значение из списка выше"}
+		toClientChan <- u
+		return errors.New("")
+	}
+
+	u.ToClient = ToClientMessage{Message: "Введите добавляемое/отнимаемое значение"}
+	toClientChan <- u
+	return nil
+}
+
+func (u *User) Val() error {
+	sum, err := strconv.ParseFloat(u.FromClient.Message, 64)
+	if err != nil {
+		utils.Loggers.Errorw(
+			"некорректное значение суммы",
+			"err", err,
+			"val", u.FromClient.Message,
+		)
+		u.ToClient = ToClientMessage{Message: "Некорректное значение суммы\nПопробуйте снова"}
+		toClientChan <- u
+		return err
+	}
+
+	w := model.NewWallet(u.ChatID)
+
+	coin, _ := u.State.Metadata("coin")
+	coinS := coin.(string)
+
+	prevState, _ := u.State.Metadata("prev_state")
+	prevStateS := prevState.(string)
+
+	var balance float64
+	if prevStateS == "add" {
+		balance, err = w.Add(coinS, sum)
+	} else if prevStateS == "sub" {
+		balance, err = w.Sub(coinS, sum)
+	}
+
+	if errors.Is(err, model.ErrValLessZero) {
+		utils.Loggers.Errorw(
+			"вычитаемое значение больше суммы в кошелке",
+			"err", err,
+		)
+		m := "Вычитаемое значение больше суммы в кошелке\nВведи сумму меньше"
+		u.ToClient = ToClientMessage{Message: m}
+		toClientChan <- u
+		return err
+	} else if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка метода",
+			"err", err,
+			"chatID", u.ChatID,
+			"coin", coin,
+			"sum", sum,
+		)
+		u.ToClient = ToClientMessage{Message: "Внутрення ошибка\nПопробуйте позже"}
+		toClientChan <- u
+		return err
+	}
+
+	u.State.SetMetadata("coin", "")
+	u.State.SetMetadata("prev_state", "")
+
+	u.ToClient = ToClientMessage{Message: fmt.Sprintf("Баланс %s: %f", coinS, balance)}
+	toClientChan <- u
+	return nil
+}
