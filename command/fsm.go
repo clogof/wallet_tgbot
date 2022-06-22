@@ -33,6 +33,7 @@ const (
 	SubCommand     = "sub"
 	DelCommand     = "del"
 	DelMakeCommand = "delMake"
+	ShowCommand    = "show"
 	CoinCommand    = "coin"
 	ValCommand     = "val"
 	StartCommand   = "start"
@@ -43,6 +44,7 @@ const (
 	ToSub     = "toSub"
 	ToDel     = "toDel"
 	ToDelMake = "toDelMake"
+	ToShow    = "toShow"
 	ToCoin    = "toCoin"
 	ToVal     = "toVal"
 	ToStart   = "toStart"
@@ -85,6 +87,8 @@ func NewCommunication() (chan *User, chan *User) {
 					break
 				}
 				u.State.Event(ToStart)
+			case ShowCommand:
+				u.Show()
 			case CoinCommand:
 				err = u.Coin()
 				if err != nil {
@@ -108,7 +112,7 @@ func NewCommunication() (chan *User, chan *User) {
 func NewUser(chatId int64) *User {
 	u := &User{ChatID: chatId}
 
-	allStates := []string{AddCommand, CoinCommand, SubCommand, DelCommand, DelMakeCommand, ValCommand, StartCommand}
+	allStates := []string{ShowCommand, AddCommand, CoinCommand, SubCommand, DelCommand, DelMakeCommand, ValCommand, StartCommand}
 
 	u.State = fsm.NewFSM(
 		StartCommand,
@@ -116,6 +120,7 @@ func NewUser(chatId int64) *User {
 			{Name: ToAdd, Src: allStates, Dst: AddCommand},
 			{Name: ToSub, Src: allStates, Dst: SubCommand},
 			{Name: ToDel, Src: allStates, Dst: DelCommand},
+			{Name: ToShow, Src: allStates, Dst: ShowCommand},
 			{Name: ToDelMake, Src: []string{DelCommand}, Dst: DelMakeCommand},
 			{Name: ToCoin, Src: []string{AddCommand, SubCommand}, Dst: CoinCommand},
 			{Name: ToVal, Src: []string{CoinCommand}, Dst: ValCommand},
@@ -208,15 +213,40 @@ func (u *User) DelMake() error {
 		utils.Loggers.Errorw(
 			"внутренняя ошибка",
 			"err", err,
-			"chatШВ", u.ChatID,
+			"chatID", u.ChatID,
 			"coin", u.FromClient.Message,
 		)
+		u.ToClient = ToClientMessage{Message: "Не удалось удалить валюту\nПопробуйте позже"}
+		toClientChan <- u
+		return err
 	}
 
 	m := "Валюта " + u.FromClient.Message + " удалена"
 	u.ToClient = ToClientMessage{Message: m}
 	toClientChan <- u
 	return nil
+}
+
+func (u *User) Show() {
+	w := model.NewWallet(u.ChatID)
+
+	u.ToClient = ToClientMessage{Message: "Получаем актуальные данные курса валют"}
+	toClientChan <- u
+
+	data, err := w.Show()
+	if err != nil {
+		utils.Loggers.Errorw(
+			"внутренняя ошибка",
+			"err", err,
+			"chat_id", u.ChatID,
+		)
+		u.ToClient = ToClientMessage{Message: "Внутренняя ошибка\nПопробуйте позже"}
+		toClientChan <- u
+		return
+	}
+
+	u.ToClient = ToClientMessage{Message: data}
+	toClientChan <- u
 }
 
 func (u *User) Coin() error {
