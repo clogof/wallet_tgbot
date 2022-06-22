@@ -51,6 +51,9 @@ func NewCommunication() (chan *User, chan *User) {
 		var err error
 		for u := range fromCl {
 			switch u.State.Current() {
+			case StartCommand:
+				u.ToClient = ToClientMessage{Message: "Воспользуйтесь меню для выбора команды"}
+				toClientChan <- u
 			case AddCommand:
 				err = u.Add()
 				if err != nil {

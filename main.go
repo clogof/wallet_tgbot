@@ -48,6 +48,9 @@ func main() {
 					users[msgChatId].State.Event(command.ToAdd)
 					fromClientChan <- users[msgChatId]
 				default:
+					m := "Некорректна команда\nВоспользуйтесь меню"
+					users[msgChatId].ToClient = command.ToClientMessage{Message: m}
+					toClientChan <- users[msgChatId]
 				}
 			} else {
 				m := strings.ToLower(update.Message.Text)
