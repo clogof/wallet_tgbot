@@ -59,5 +59,5 @@ func CheckCallback(msg *command.User) {
 	if _, err := bot.Request(callback); err != nil {
 		log.Printf("CheckCallback error: %s", err)
 	}
-	bot.Send(tgbotapi.NewMessage(msg.ChatID, "Выбрано "+msg.FromClient.Message))
+	bot.Send(tgbotapi.NewMessage(msg.ChatID, "Выбрано: "+msg.FromClient.Message))
 }

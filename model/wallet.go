@@ -50,6 +50,7 @@ func (w *wallet) Add(coin string, val float64) (float64, error) {
 
 	query := "update wallet set value=:value where chat_id=:chat_id and currency=:currency"
 
+	coin = strings.ToLower(coin)
 	temp_w := wallet{ChatId: w.ChatId, Currency: coin, Value: 0}
 
 	err = w.conn.Get(
@@ -179,7 +180,7 @@ func (w *wallet) GetCurrency() ([]string, error) {
 	defer w.conn.Close()
 
 	var temp_w []wallet
-	err = w.conn.Select(&temp_w, "select currency from wallet where chat_id = $1", w.ChatId)
+	err = w.conn.Select(&temp_w, "select upper(currency) as currency from wallet where chat_id = $1", w.ChatId)
 	if err != nil {
 		return []string{}, err
 	}
