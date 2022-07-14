@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -22,6 +23,10 @@ func InitEnvVar(path ...string) (err error) {
 	}
 
 	TgToken = os.Getenv("TOKEN")
+	if TgToken == "" {
+		return errors.New("empty Telegram Token")
+	}
+
 	PGUrl = os.Getenv("PG_URL")
 	CurrateKey = os.Getenv("CURRATE_KEY")
 
